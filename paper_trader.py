@@ -40,29 +40,39 @@ PAPER_STATE_FILE = Path(__file__).parent / "logs" / "paper_trader_state.json"
 TRADE_LOG_FILE = Path(__file__).parent / "logs" / "paper_trade_log.json"
 
 
-def load_state():
-    if PAPER_STATE_FILE.exists():
-        with open(PAPER_STATE_FILE) as f:
+def _state_path(strategy_name, symbol, timeframe):
+    safe = f"{strategy_name}_{symbol.replace('/', '')}_{timeframe}"
+    return Path(__file__).parent / "logs" / f"paper_state_{safe}.json"
+
+
+def _log_path(strategy_name, symbol, timeframe):
+    safe = f"{strategy_name}_{symbol.replace('/', '')}_{timeframe}"
+    return Path(__file__).parent / "logs" / f"paper_log_{safe}.json"
+
+
+def load_state(state_file):
+    if state_file.exists():
+        with open(state_file) as f:
             return json.load(f)
     return {"open_trade": None, "equity": 1000.0, "trade_count": 0, "last_candle_ts": 0}
 
 
-def save_state(state):
-    with open(PAPER_STATE_FILE, "w") as f:
+def save_state(state, state_file):
+    with open(state_file, "w") as f:
         json.dump(state, f, indent=2, default=str)
 
 
-def load_trade_log():
-    if TRADE_LOG_FILE.exists():
-        with open(TRADE_LOG_FILE) as f:
+def load_trade_log(log_file):
+    if log_file.exists():
+        with open(log_file) as f:
             return json.load(f)
     return []
 
 
-def append_trade(trade_dict):
-    log = load_trade_log()
+def append_trade(trade_dict, log_file):
+    log = load_trade_log(log_file)
     log.append(trade_dict)
-    with open(TRADE_LOG_FILE, "w") as f:
+    with open(log_file, "w") as f:
         json.dump(log, f, indent=2, default=str)
 
 
@@ -101,7 +111,7 @@ def check_stop_target(open_trade_dict, candle):
     return False, 0.0, ""
 
 
-def close_virtual_trade(open_trade_dict, exit_price, exit_time, reason, state):
+def close_virtual_trade(open_trade_dict, exit_price, exit_time, reason, state, state_file, log_file):
     """Close the virtual trade, compute PnL, append to log, update equity."""
     direction_factor = 1 if open_trade_dict["direction"] == "long" else -1
     pos_usd = open_trade_dict["position_size_usd"]
@@ -126,17 +136,17 @@ def close_virtual_trade(open_trade_dict, exit_price, exit_time, reason, state):
         "win": net > 0, "reason": reason,
         "mode": "paper",
     }
-    append_trade(trade)
+    append_trade(trade, log_file)
 
     state["equity"] += net
     state["trade_count"] += 1
     state["open_trade"] = None
     print(f"  [PAPER CLOSE] {direction} @ {exit_price:.2f} — {reason}")
     print(f"    PnL: ${net:+.2f}  ({r_mult:+.2f}R)  equity=${state['equity']:.2f}")
-    save_state(state)
+    save_state(state, state_file)
 
 
-def open_virtual_trade(signal_dict, candle, state):
+def open_virtual_trade(signal_dict, candle, state, state_file):
     """Open a virtual trade from a signal."""
     entry = signal_dict["entry_price"]
     stop = signal_dict["stop_price"]
@@ -162,7 +172,7 @@ def open_virtual_trade(signal_dict, candle, state):
     print(f"  [PAPER OPEN] {trade['direction']} @ {entry:.2f}")
     print(f"    stop={stop:.2f}  target={signal_dict['target_price']:.2f}  size=${pos_usd:.2f}")
     print(f"    reason: {signal_dict['reason']}")
-    save_state(state)
+    save_state(state, state_file)
 
 
 def signal_to_dict(sig: Signal) -> dict:
@@ -187,18 +197,20 @@ def run_paper(strategy: Strategy, exchange_id: str, symbol: str, timeframe: str,
     print(f"  symbol:   {symbol} {timeframe}")
     print(f"  exchange: {exchange_id}")
     print(f"  poll:     every {poll_seconds}s")
-    print(f"  state:    {PAPER_STATE_FILE}")
-    print(f"  log:      {TRADE_LOG_FILE}")
+    state_file = _state_path(strategy.name, symbol, timeframe)
+    log_file = _log_path(strategy.name, symbol, timeframe)
+    print(f"  state:    {state_file}")
+    print(f"  log:      {log_file}")
     print(f"  Ctrl+C to stop. State persists — restart continues from where it left off.")
     print()
 
-    state = load_state()
+    state = load_state(state_file)
     print(f"  resuming: equity=${state['equity']:.2f}  trades={state['trade_count']}  open_trade={'yes' if state['open_trade'] else 'no'}")
 
     # Graceful shutdown
     def handle_sigint(sig, frame):
         print("\n[PAPER TRADER] stopping — saving state...")
-        save_state(state)
+        save_state(state, state_file)
         sys.exit(0)
     sig_module.signal(sig_module.SIGINT, handle_sigint)
 
@@ -233,12 +245,12 @@ def run_paper(strategy: Strategy, exchange_id: str, symbol: str, timeframe: str,
                     "high": latest_closed["high"], "low": latest_closed["low"],
                 })
                 if hit:
-                    close_virtual_trade(state["open_trade"], price, str(latest_ts), reason, state)
+                    close_virtual_trade(state["open_trade"], price, str(latest_ts), reason, state, state_file, log_file)
                 else:
                     # Ask strategy for exit signal
                     ex = strategy.evaluate(latest_closed, state["open_trade"])
                     if isinstance(ex, ExitSignal) and ex.exit:
-                        close_virtual_trade(state["open_trade"], ex.exit_price, str(latest_ts), ex.reason, state)
+                        close_virtual_trade(state["open_trade"], ex.exit_price, str(latest_ts), ex.reason, state, state_file, log_file)
 
             # 2. Check for new entry
             if not state["open_trade"]:
@@ -249,11 +261,11 @@ def run_paper(strategy: Strategy, exchange_id: str, symbol: str, timeframe: str,
                     risk = abs(sig.entry_price - sig.stop_price)
                     reward = abs(sig.target_price - sig.entry_price)
                     if risk > 0 and (reward / risk) >= 1.5:
-                        open_virtual_trade(sig_d, {"datetime": str(latest_ts), "high": latest_closed["high"], "low": latest_closed["low"]}, state)
+                        open_virtual_trade(sig_d, {"datetime": str(latest_ts), "high": latest_closed["high"], "low": latest_closed["low"]}, state, state_file)
                     else:
                         print(f"  [PAPER SKIP] signal rejected — R:R below 1.5 gate")
 
-            save_state(state)
+            save_state(state, state_file)
             # Wait for next poll. For long timeframes, poll less frequently.
             time.sleep(min(poll_seconds, tf_seconds // 4))
 
