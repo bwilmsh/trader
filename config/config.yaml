@@ -1,0 +1,29 @@
+# Trading Bot Configuration
+# LIVE TRADING IS OFF BY DEFAULT. Do not enable without explicit owner approval.
+# Even when enabled, hard risk caps below apply and cannot be overridden by strategy logic.
+
+live_trading: false          # GATE: false = paper trading only. true = real orders via ccxt.
+# When live_trading becomes true, these caps are enforced regardless of strategy:
+live_max_position_usd: 50.0  # Max USD per single position. Hard cap.
+live_daily_loss_limit: 25.0  # USD. Stop trading for the day if realized PnL hits this.
+live_max_open_trades: 3      # Max concurrent open positions.
+live_exchange: binance        # Exchange for live orders (must match data source).
+live_symbol: BTC/USDT
+live_timeframe: 1h
+
+# Backtest defaults
+backtest_symbol: BTC/USDT
+backtest_timeframe: 1h
+backtest_since: 2023-01-01T00:00:00Z  # ISO date. ccxt fetches from here.
+backtest_initial_capital: 1000.0       # USD
+backtest_fee_pct: 0.001               # 0.1% taker fee per trade (crypto spot default)
+backtest_slippage_pct: 0.0005        # 0.05% slippage assumption
+
+# Risk management — applied to every trade, backtest and live
+risk_per_trade_pct: 0.01        # 1% of equity risked per trade (stop distance * position size)
+rr_min: 1.5                     # Minimum R:R for a trade to be taken. Below this = no entry.
+strategy_expectancy_min: 0.0   # Strategy must have positive expectancy to leave paper mode
+
+# Data source
+data_exchange: binance
+data_since: 2023-01-01T00:00:00Z
