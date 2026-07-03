@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading Bot Dashboard</title>
+<style>
+  :root { --bg: #0d1117; --surface: #161b22; --border: #30363d; --text: #c9d1d9; --green: #3fb950; --red: #f85149; --yellow: #d29922; --blue: #58a6ff; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); padding: 20px; max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 1.8rem; margin-bottom: 4px; }
+  h2 { font-size: 1.2rem; margin: 24px 0 12px; color: var(--blue); }
+  .subtitle { color: #8b949e; font-size: 0.85rem; margin-bottom: 24px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-bottom: 24px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .card h3 { font-size: 0.9rem; color: #8b949e; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat { font-size: 1.8rem; font-weight: 700; }
+  .stat.green { color: var(--green); }
+  .stat.red { color: var(--red); }
+  .stat-label { font-size: 0.75rem; color: #8b949e; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  th { color: #8b949e; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pass { color: var(--green); font-weight: 600; }
+  .fail { color: var(--red); }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+  .tag.long { background: rgba(63,185,80,0.15); color: var(--green); }
+  .tag.short { background: rgba(248,81,73,0.15); color: var(--red); }
+  .tag.paper { background: rgba(88,166,255,0.15); color: var(--blue); }
+  #equity-chart { width: 100%; height: 200px; background: var(--bg); border-radius: 4px; margin-top: 12px; }
+  .strategy-select { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 4px; font-size: 0.85rem; margin-bottom: 12px; }
+  .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; margin-right: 6px; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .empty { color: #8b949e; font-style: italic; padding: 20px; text-align: center; }
+  .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 0.75rem; color: #8b949e; }
+  .scroll-table { max-height: 400px; overflow-y: auto; overflow-x: auto; }
+</style>
+</head>
+<body>
+  <h1>📈 Trading Bot Dashboard</h1>
+  <p class="subtitle" id="last-update">Loading...</p>
+
+  <h2><span class="live-dot"></span>Paper Traders — Live Status</h2>
+  <div class="grid" id="paper-status"></div>
+
+  <h2>Strategy League Table — Backtest Results</h2>
+  <div class="scroll-table">
+    <table id="rankings-table">
+      <thead><tr>
+        <th>Rank</th><th>Strategy</th><th>TF</th><th>Trades</th><th>Win%</th>
+        <th>R:R</th><th>Expectancy</th><th>PF</th><th>Max DD</th><th>Gate</th>
+      </tr></thead>
+      <tbody id="rankings-body"></tbody>
+    </table>
+  </div>
+
+  <h2>Backtest Detail — Equity Curve & Trades</h2>
+  <select class="strategy-select" id="detail-select"></select>
+  <canvas id="equity-chart"></canvas>
+  <div class="scroll-table" style="margin-top: 12px;">
+    <table id="trades-table">
+      <thead><tr>
+        <th>#</th><th>Dir</th><th>Entry Time</th><th>Entry</th><th>Exit</th>
+        <th>Stop</th><th>Target</th><th>Size $</th><th>PnL $</th><th>R</th><th>Win</th>
+      </tr></thead>
+      <tbody id="trades-body"></tbody>
+    </table>
+  </div>
+
+  <h2>Paper Trade Log — Live Virtual Trades</h2>
+  <div class="scroll-table">
+    <table id="paper-table">
+      <thead><tr>
+        <th>#</th><th>Strategy</th><th>Dir</th><th>Entry Time</th><th>Entry</th>
+        <th>Exit</th><th>PnL $</th><th>R</th><th>Result</th><th>Reason</th>
+      </tr></thead>
+      <tbody id="paper-body"></tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    Trading Bot — Research → Backtest → Paper Trade → Live Gate OFF by default<br>
+    Data: real Binance OHLCV via ccxt. Risk: 1% per trade, R:R gate ≥ 1.5, fees + slippage simulated.
+  </div>
+
+<script>
+const API = window.location.origin;
+
+async function fetchJSON(path) {
+  const r = await fetch(API + path);
+  return r.json();
+}
+
+function fmt(n, d=2) { return n == null ? '-' : Number(n).toFixed(d); }
+function fmtUsd(n) { return n == null ? '-' : '$' + Number(n).toFixed(2); }
+function win(w) { return w ? '<span class="pass">WIN</span>' : '<span class="fail">LOSS</span>'; }
+function dirTag(d) { return `<span class="tag ${d}">${(d||'').toUpperCase()}</span>`; }
+
+async function loadOverview() {
+  const data = await fetchJSON('/api/overview');
+  document.getElementById('last-update').textContent =
+    `Last updated: ${new Date(data.updated).toLocaleString()} | ${data.total_backtests} backtests | ${data.paper_trade_count} paper trades`;
+
+  const ps = document.getElementById('paper-status');
+  if (!data.paper_traders || data.paper_traders.length === 0) {
+    ps.innerHTML = '<div class="card"><p class="empty">No paper traders running</p></div>';
+  } else {
+    ps.innerHTML = data.paper_traders.map(t => `
+      <div class="card">
+        <h3>${(t._strategy||'').toUpperCase()} · ${t._timeframe||''}</h3>
+        <div class="stat ${t.equity >= 1000 ? 'green' : 'red'}">${fmtUsd(t.equity)}</div>
+        <div class="stat-label">virtual equity</div>
+        <div style="margin-top: 12px; font-size: 0.85rem;">
+          <div>Trades: <strong>${t.trade_count}</strong></div>
+          <div>Open: <strong>${t.open_trade ? 'YES ' + dirTag(t.open_trade.direction) : 'no'}</strong></div>
+        </div>
+        <span class="tag paper">PAPER</span>
+      </div>
+    `).join('');
+  }
+
+  const rb = document.getElementById('rankings-body');
+  rb.innerHTML = data.backtests.map((b, i) => `
+    <tr style="cursor:pointer" onclick="selectStrategy('${b._strategy}','${b._timeframe}')">
+      <td>${i+1}</td>
+      <td><strong>${b._strategy}</strong></td>
+      <td>${b._timeframe}</td>
+      <td class="num">${b.total_trades}</td>
+      <td class="num">${fmt(b.win_rate_pct,1)}%</td>
+      <td class="num">${fmt(b.rr_ratio)}</td>
+      <td class="num" style="color: ${b.expectancy_r > 0 ? 'var(--green)' : 'var(--red)'}">${fmt(b.expectancy_r,3)}R</td>
+      <td class="num">${fmt(b.profit_factor)}</td>
+      <td class="num">${fmt(b.max_drawdown_pct,1)}%</td>
+      <td>${b.passes_gate ? '<span class="pass">✅ PASS</span>' : '<span class="fail">❌</span>'}</td>
+    </tr>
+  `).join('');
+
+  const sel = document.getElementById('detail-select');
+  sel.innerHTML = data.backtests.map(b =>
+    `<option value="${b._strategy}|${b._timeframe}">${b._strategy} ${b._timeframe} (${fmt(b.expectancy_r,3)}R)</option>`
+  ).join('');
+  if (data.backtests.length > 0) {
+    selectStrategy(data.backtests[0]._strategy, data.backtests[0]._timeframe);
+  }
+}
+
+async function selectStrategy(strategy, timeframe) {
+  document.getElementById('detail-select').value = `${strategy}|${timeframe}`;
+  const data = await fetchJSON(`/api/backtest?strategy=${strategy}&timeframe=${timeframe}`);
+  if (data.error) {
+    document.getElementById('trades-body').innerHTML = `<tr><td colspan="11" class="empty">${data.error}</td></tr>`;
+    return;
+  }
+
+  drawEquityCurve(data.equity_curve);
+
+  const tb = document.getElementById('trades-body');
+  if (!data.trades || data.trades.length === 0) {
+    tb.innerHTML = '<tr><td colspan="11" class="empty">No trades</td></tr>';
+    return;
+  }
+  tb.innerHTML = data.trades.map((t, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td>${dirTag(t.direction)}</td>
+      <td>${t.entry_time ? String(t.entry_time).slice(0,16) : '-'}</td>
+      <td class="num">${fmt(t.entry_price)}</td>
+      <td class="num">${fmt(t.exit_price)}</td>
+      <td class="num">${fmt(t.stop_price)}</td>
+      <td class="num">${fmt(t.target_price)}</td>
+      <td class="num">${fmtUsd(t.position_size_usd)}</td>
+      <td class="num" style="color:${t.pnl_usd>=0?'var(--green)':'var(--red)'}">${fmtUsd(t.pnl_usd)}</td>
+      <td class="num">${fmt(t.r_multiple)}R</td>
+      <td>${win(t.win)}</td>
+    </tr>
+  `).join('');
+}
+
+function drawEquityCurve(points) {
+  const canvas = document.getElementById('equity-chart');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = canvas.offsetWidth;
+  const H = canvas.height = 200;
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, W, H);
+  if (!points || points.length === 0) return;
+  const equities = points.map(p => p.equity);
+  const minE = Math.min(...equities), maxE = Math.max(...equities);
+  const range = maxE - minE || 1, pad = 20;
+  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad + (H - 2*pad) * i / 4;
+    ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W-pad, y); ctx.stroke();
+  }
+  ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 2; ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = pad + (W - 2*pad) * i / (points.length - 1 || 1);
+    const y = H - pad - (H - 2*pad) * (p.equity - minE) / range;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.lineTo(W-pad, H-pad); ctx.lineTo(pad, H-pad); ctx.closePath();
+  ctx.fillStyle = 'rgba(88,166,255,0.1)'; ctx.fill();
+  ctx.fillStyle = '#8b949e'; ctx.font = '11px sans-serif';
+  ctx.fillText('$' + maxE.toFixed(0), 2, pad+4);
+  ctx.fillText('$' + minE.toFixed(0), 2, H-pad+4);
+}
+
+async function loadPaperTrades() {
+  const data = await fetchJSON('/api/paper-trades');
+  const tb = document.getElementById('paper-body');
+  if (!data.trades || data.trades.length === 0) {
+    tb.innerHTML = '<tr><td colspan="10" class="empty">No paper trades yet — waiting for signals</td></tr>';
+    return;
+  }
+  tb.innerHTML = data.trades.map((t, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td><strong>${t._strategy||''}</strong></td>
+      <td>${dirTag(t.direction)}</td>
+      <td>${t.entry_time ? String(t.entry_time).slice(0,16) : '-'}</td>
+      <td class="num">${fmt(t.entry_price)}</td>
+      <td class="num">${t.exit_price ? fmt(t.exit_price) : 'open'}</td>
+      <td class="num" style="color:${t.pnl_usd>=0?'var(--green)':'var(--red)'}">${t.pnl_usd != null ? fmtUsd(t.pnl_usd) : '-'}</td>
+      <td class="num">${t.r_multiple != null ? fmt(t.r_multiple)+'R' : '-'}</td>
+      <td>${t.win != null ? win(t.win) : '<span class="tag paper">OPEN</span>'}</td>
+      <td style="font-size:0.75rem;max-width:200px;overflow:hidden;text-overflow:ellipsis">${t.reason||''}</td>
+    </tr>
+  `).join('');
+}
+
+loadOverview();
+loadPaperTrades();
+setInterval(() => { loadOverview(); loadPaperTrades(); }, 30000);
+</script>
+</body>
+</html>
