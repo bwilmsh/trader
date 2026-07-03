@@ -231,8 +231,15 @@ async def handle_client(reader, writer, addr=None):
     await handler.handle()
 
 async def start_server(port=8776, host="0.0.0.0"):
+    # SO_REUSEADDR to avoid "address in use" after restart
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind((host, port))
+    sock.listen(128)
+    
     server = await asyncio.start_server(
-        lambda r, w: handle_client(r, w), host, port
+        lambda r, w: handle_client(r, w), sock=sock
     )
     print(f"Trading Bot Dashboard running on http://{host}:{port}")
     print(f"  Open: http://localhost:{port}")
