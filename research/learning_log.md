@@ -1,31 +1,34 @@
 # Strategy League Table — Learning Log
 
-Generated: 2026-07-03 11:18 UTC
+Generated: 2026-07-03 11:23 UTC
 Source: backtest logs in `logs/` (real Binance OHLCV, event-driven engine)
 
 Ranking: expectancy (R per trade) first, then R:R ratio. A strategy must pass the gate (expectancy > 0 AND R:R >= 1.5) to be a real contender.
 
 | Rank | Strategy | Split | Trades | Win% | Avg Win R | Avg Loss R | R:R | Expectancy (R) | Profit Factor | Max DD% | Passes Gate |
 |------|----------|-------|--------|------|-----------|------------|-----|-----------------|---------------|--------|-------------|
-| 1 | ut | full | 1 | 100.0% | +1.74R | 0.00R | inf | +1.739R | inf | 0.0% | ✅ YES |
+| 1 | supertrend | full | 17 | 47.1% | +1.16R | -0.75R | 1.54 | +0.146R | 1.34 | 3.7% | ✅ YES |
 | 2 | macd | full | 33 | 42.4% | +1.54R | -0.89R | 1.74 | +0.143R | 1.26 | 4.0% | ✅ YES |
-| 3 | ut | full | 275 | 33.8% | +1.35R | -0.80R | 1.70 | -0.070R | 0.87 | 25.2% | ✅ YES |
-| 4 | supertrend | full | 55 | 36.4% | +0.93R | -0.67R | 1.39 | -0.087R | 0.79 | 7.2% | ✅ YES |
-| 5 | supertrend | full | 261 | 33.7% | +1.19R | -0.77R | 1.55 | -0.109R | 0.78 | 27.7% | ✅ YES |
-| 6 | rsi2 | full | 197 | 51.3% | +0.39R | -0.73R | 0.53 | -0.157R | 0.58 | 33.5% | ❌ NO |
-| 7 | rsi2 | full | 519 | 36.8% | +0.26R | -0.55R | 0.47 | -0.255R | 0.28 | 73.7% | ❌ NO |
-| 8 | ema | full | 244 | 31.1% | +1.14R | -1.00R | 1.14 | -0.331R | 0.52 | 56.9% | ✅ YES |
+| 3 | wavetrend | full | 32 | 34.4% | +0.89R | -0.48R | 1.86 | -0.008R | 0.96 | 5.0% | ❌ NO |
+| 4 | ut | full | 275 | 33.8% | +1.35R | -0.80R | 1.70 | -0.070R | 0.87 | 25.2% | ✅ YES |
+| 5 | supertrend | full | 55 | 36.4% | +0.93R | -0.67R | 1.39 | -0.087R | 0.79 | 7.2% | ✅ YES |
+| 6 | supertrend | full | 261 | 33.7% | +1.19R | -0.77R | 1.55 | -0.109R | 0.78 | 27.7% | ✅ YES |
+| 7 | macd | full | 11 | 36.4% | +1.07R | -0.80R | 1.34 | -0.119R | 0.76 | 2.3% | ❌ NO |
+| 8 | wavetrend | full | 136 | 36.0% | +1.00R | -0.77R | 1.29 | -0.134R | 0.72 | 17.8% | ❌ NO |
+| 9 | rsi2 | full | 197 | 51.3% | +0.39R | -0.73R | 0.53 | -0.157R | 0.58 | 33.5% | ❌ NO |
+| 10 | rsi2 | full | 519 | 36.8% | +0.26R | -0.55R | 0.47 | -0.255R | 0.28 | 73.7% | ❌ NO |
+| 11 | ema | full | 244 | 31.1% | +1.14R | -1.00R | 1.14 | -0.331R | 0.52 | 56.9% | ✅ YES |
 
 ## Strategy details
 
-### ut
-- Trades: 1 (1W / 0L)
-- Win rate: 100.0%
-- R:R ratio: inf  (avg win +1.74R / avg loss 0.00R)
-- Expectancy: +1.739R per trade
-- Profit factor: inf
-- Max drawdown: 0.0% ($0.00)
-- Sharpe: 0.00
+### supertrend
+- Trades: 17 (8W / 9L)
+- Win rate: 47.1%
+- R:R ratio: 1.54  (avg win +1.16R / avg loss -0.75R)
+- Expectancy: +0.146R per trade
+- Profit factor: 1.34
+- Max drawdown: 3.7% ($38.89)
+- Sharpe: 11.50
 - Passes gate: True
 
 ### macd
@@ -38,14 +41,24 @@ Ranking: expectancy (R per trade) first, then R:R ratio. A strategy must pass th
 - Sharpe: 9.73
 - Passes gate: True
 
-### supertrend
-- Trades: 55 (20W / 35L)
-- Win rate: 36.4%
-- R:R ratio: 1.39  (avg win +0.93R / avg loss -0.67R)
-- Expectancy: -0.087R per trade
-- Profit factor: 0.79
-- Max drawdown: 7.2% ($73.58)
-- Sharpe: -8.84
+### wavetrend
+- Trades: 32 (11W / 21L)
+- Win rate: 34.4%
+- R:R ratio: 1.86  (avg win +0.89R / avg loss -0.48R)
+- Expectancy: -0.008R per trade
+- Profit factor: 0.96
+- Max drawdown: 5.0% ($52.59)
+- Sharpe: -1.31
+- Passes gate: False
+
+### ut
+- Trades: 275 (93W / 182L)
+- Win rate: 33.8%
+- R:R ratio: 1.70  (avg win +1.35R / avg loss -0.80R)
+- Expectancy: -0.070R per trade
+- Profit factor: 0.87
+- Max drawdown: 25.2% ($268.95)
+- Sharpe: -5.86
 - Passes gate: False
 
 ### rsi2
