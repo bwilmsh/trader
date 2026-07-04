@@ -79,6 +79,17 @@
     </table>
   </div>
 
+  <h2>🔴 Live Trade Log — Real Money Trades</h2>
+  <div class="scroll-table">
+    <table id="live-table">
+      <thead><tr>
+        <th>#</th><th>Strategy</th><th>Dir</th><th>Entry Time</th><th>Entry</th>
+        <th>Exit</th><th>Size $</th><th>PnL $</th><th>R</th><th>Result</th><th>Reason</th>
+      </tr></thead>
+      <tbody id="live-body"></tbody>
+    </table>
+  </div>
+
   <div class="footer">
     Trading Bot — Research → Backtest → Paper Trade → Live Gate OFF by default<br>
     Data: real Binance OHLCV via ccxt. Risk: 1% per trade, R:R gate ≥ 1.5, fees + slippage simulated.
@@ -231,7 +242,32 @@ async function loadPaperTrades() {
 
 loadOverview();
 loadPaperTrades();
-setInterval(() => { loadOverview(); loadPaperTrades(); }, 30000);
+loadLiveTrades();
+setInterval(() => { loadOverview(); loadPaperTrades(); loadLiveTrades(); }, 30000);
+
+async function loadLiveTrades() {
+  const data = await fetchJSON('/api/live-trades');
+  const tb = document.getElementById('live-body');
+  if (!data.trades || data.trades.length === 0) {
+    tb.innerHTML = '<tr><td colspan="11" class="empty">No live trades — live trading is OFF. Flip live_trading in config.yaml and add Binance API keys to .env to start.</td></tr>';
+    return;
+  }
+  tb.innerHTML = data.trades.map((t, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td><strong>${t.strategy||''}</strong></td>
+      <td>${dirTag(t.direction)}</td>
+      <td>${t.entry_time ? String(t.entry_time).slice(0,16) : '-'}</td>
+      <td class="num">${fmt(t.entry_price)}</td>
+      <td class="num">${t.exit_price ? fmt(t.exit_price) : 'open'}</td>
+      <td class="num">${fmtUsd(t.position_size_usd)}</td>
+      <td class="num" style="color:${t.pnl_usd>=0?'var(--green)':'var(--red)'}">${t.pnl_usd != null ? fmtUsd(t.pnl_usd) : '-'}</td>
+      <td class="num">${t.r_multiple != null ? fmt(t.r_multiple)+'R' : '-'}</td>
+      <td>${t.win != null ? win(t.win) : '<span class="tag live">OPEN</span>'}</td>
+      <td style="font-size:0.75rem;max-width:200px;overflow:hidden;text-overflow:ellipsis">${t.reason||''}</td>
+    </tr>
+  `).join('');
+}
 </script>
 </body>
 </html>

@@ -99,18 +99,45 @@ def _build_equity_curve(trades, initial_capital=1000.0):
         points.append({"trade": i, "equity": round(equity, 2), "pnl": round(t.get("pnl_usd", 0), 2)})
     return points
 
+def _load_live_trades():
+    """Load live (real money) trade log."""
+    f = LOG_DIR / "live_trade_log.json"
+    if f.exists():
+        try:
+            with open(f) as fh:
+                return json.load(fh)
+        except (json.JSONDecodeError, KeyError):
+            pass
+    return []
+
+def _load_live_state():
+    """Load live trader state if running."""
+    f = LOG_DIR / "live_trader_state.json"
+    if f.exists():
+        try:
+            with open(f) as fh:
+                return json.load(fh)
+        except (json.JSONDecodeError, KeyError):
+            pass
+    return None
+
 # ─── API handlers ──────────────────────────────────────────────────────
 
 def handle_overview():
     backtests = _load_backtest_logs()
     paper_states = _load_paper_states()
     paper_trades = _load_paper_trades()
+    live_trades = _load_live_trades()
+    live_state = _load_live_state()
     valid = [b for b in backtests if b.get("total_trades", 0) > 0]
     valid.sort(key=lambda b: (b.get("expectancy_r", -9), b.get("rr_ratio", 0)), reverse=True)
     return {
         "backtests": valid,
         "paper_traders": paper_states,
         "paper_trade_count": len(paper_trades),
+        "live_trades": live_trades,
+        "live_trade_count": len(live_trades),
+        "live_state": live_state,
         "total_backtests": len(valid),
         "updated": datetime.now(timezone.utc).isoformat(),
     }
@@ -134,6 +161,11 @@ def handle_backtest_detail(query):
 def handle_paper_trades():
     trades = _load_paper_trades()
     return {"trades": trades, "count": len(trades)}
+
+def handle_live_trades():
+    trades = _load_live_trades()
+    state = _load_live_state()
+    return {"trades": trades, "count": len(trades), "state": state}
 
 def handle_paper_status():
     states = _load_paper_states()
@@ -197,6 +229,8 @@ class HTTPRequestHandler:
                 body = json.dumps(result, default=str)
             elif route == "/api/paper-trades":
                 body = json.dumps(handle_paper_trades(), default=str)
+            elif route == "/api/live-trades":
+                body = json.dumps(handle_live_trades(), default=str)
             elif route == "/api/paper-status":
                 body = json.dumps(handle_paper_status(), default=str)
             elif route == "/health":
